@@ -1,6 +1,6 @@
 [package]
 name = "server_users"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 authors = ["Thomas Holland"]
 description = "A terminal-based SSH server monitoring tool that displays real-time CPU and RAM usage per user on remote servers"
