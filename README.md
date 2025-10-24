@@ -1,5 +1,9 @@
 # Server Users Monitor
 
+[![Crates.io](https://img.shields.io/crates/v/server_users.svg)](https://crates.io/crates/server_users)
+[![Downloads](https://img.shields.io/crates/d/server_users.svg)](https://crates.io/crates/server_users)
+[![License](https://img.shields.io/crates/l/server_users.svg)](https://github.com/0thomasholland/server-users/blob/main/LICENSE)
+
 A terminal-based SSH server monitoring tool built with Rust that displays real-time CPU and RAM usage per user on remote servers.
 
 Motivation was to have an easy way to see who was using all the resources on a shared server!
