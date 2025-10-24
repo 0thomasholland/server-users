@@ -2,6 +2,14 @@
 name = "server_users"
 version = "0.1.0"
 edition = "2024"
+authors = ["Thomas Holland"]
+description = "A terminal-based SSH server monitoring tool that displays real-time CPU and RAM usage per user on remote servers"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/0thomasholland/server-users"
+homepage = "https://github.com/0thomasholland/server-users"
+readme = "README.md"
+keywords = ["ssh", "monitoring", "terminal", "server", "tui"]
+categories = ["command-line-utilities", "network-programming"]
 
 [dependencies]
 ratatui = "0.28"
