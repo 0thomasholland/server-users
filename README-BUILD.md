@@ -2,7 +2,7 @@
 
 This document describes how to build release binaries for macOS ARM64 and Linux x86_64.
 
-![](./figs/screenshot.png)
+![](https://github.com/0thomasholland/server-users/blob/main/figs/screenshot.png?raw=true)
 
 ## Quick Start
 
