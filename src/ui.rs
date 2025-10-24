@@ -184,8 +184,6 @@ pub struct HistoricalData {
     pub _timestamp: DateTime<Local>,
     pub cpu_total: f64,
     pub ram_total: f64,
-    pub top_cpu_users: Vec<(String, f64)>,  // (username, cpu_percent)
-    pub top_ram_users: Vec<(String, f64)>,  // (username, ram_mb)
 }
 
 pub struct App {
@@ -223,30 +221,10 @@ impl App {
         let cpu_total: f64 = self.users.iter().map(|u| u.cpu_percent).sum();
         let ram_total: f64 = self.users.iter().map(|u| u.ram_mb).sum();
         
-        // Get top 3 users by CPU
-        let mut cpu_sorted = self.users.clone();
-        cpu_sorted.sort_by(|a, b| b.cpu_percent.partial_cmp(&a.cpu_percent).unwrap());
-        let top_cpu_users: Vec<(String, f64)> = cpu_sorted
-            .iter()
-            .take(3)
-            .map(|u| (u.username.clone(), u.cpu_percent))
-            .collect();
-        
-        // Get top 3 users by RAM
-        let mut ram_sorted = self.users.clone();
-        ram_sorted.sort_by(|a, b| b.ram_mb.partial_cmp(&a.ram_mb).unwrap());
-        let top_ram_users: Vec<(String, f64)> = ram_sorted
-            .iter()
-            .take(3)
-            .map(|u| (u.username.clone(), u.ram_mb))
-            .collect();
-        
         self.history.push(HistoricalData {
             _timestamp: Local::now(),
             cpu_total,
             ram_total,
-            top_cpu_users,
-            top_ram_users,
         });
         
         // Keep only last MAX_HISTORY entries
@@ -585,7 +563,7 @@ fn render_monitoring_screen(f: &mut Frame, app: &App) {
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(chunks[2]);
 
-    // CPU graph with top 3 users
+    // CPU graph with total only
     if !app.history.is_empty() {
         // Total CPU data
         let cpu_total_data: Vec<(f64, f64)> = app
@@ -602,7 +580,7 @@ fn render_monitoring_screen(f: &mut Frame, app: &App) {
             .fold(0.0, f64::max)
             .max(10.0);
 
-        let mut datasets = vec![
+        let datasets = vec![
             Dataset::default()
                 .name("Total")
                 .marker(symbols::Marker::Braille)
@@ -611,52 +589,8 @@ fn render_monitoring_screen(f: &mut Frame, app: &App) {
                 .data(&cpu_total_data)
         ];
 
-        // Add top 3 users data
-        let colors = [Color::Yellow, Color::Cyan, Color::LightBlue];
-        let mut user_datasets: Vec<(String, Vec<(f64, f64)>, Color)> = Vec::new();
-        
-        // Track top users across all history
-        let mut all_top_users: std::collections::HashSet<String> = std::collections::HashSet::new();
-        for h in &app.history {
-            for (username, _) in &h.top_cpu_users {
-                all_top_users.insert(username.clone());
-            }
-        }
-        
-        // Create dataset for each top user
-        for (idx, username) in all_top_users.iter().take(3).enumerate() {
-            let user_data: Vec<(f64, f64)> = app
-                .history
-                .iter()
-                .enumerate()
-                .map(|(i, h)| {
-                    let cpu = h.top_cpu_users
-                        .iter()
-                        .find(|(u, _)| u == username)
-                        .map(|(_, c)| *c)
-                        .unwrap_or(0.0);
-                    (i as f64, cpu)
-                })
-                .collect();
-            
-            if !user_data.is_empty() {
-                user_datasets.push((username.clone(), user_data, colors[idx % colors.len()]));
-            }
-        }
-        
-        for (username, data, color) in &user_datasets {
-            datasets.push(
-                Dataset::default()
-                    .name(username.as_str())
-                    .marker(symbols::Marker::Braille)
-                    .graph_type(GraphType::Line)
-                    .style(Style::default().fg(*color))
-                    .data(data)
-            );
-        }
-
         let cpu_chart = Chart::new(datasets)
-            .block(Block::default().title("CPU Usage Over Time (Top 3 Users)").borders(Borders::ALL))
+            .block(Block::default().title("CPU Usage Over Time").borders(Borders::ALL))
             .x_axis(
                 Axis::default()
                     .title("Time")
@@ -679,7 +613,7 @@ fn render_monitoring_screen(f: &mut Frame, app: &App) {
         f.render_widget(cpu_chart, graph_chunks[0]);
     }
 
-    // RAM graph with top 3 users
+    // RAM graph with total only
     if !app.history.is_empty() {
         // Total RAM data
         let ram_total_data: Vec<(f64, f64)> = app
@@ -699,7 +633,7 @@ fn render_monitoring_screen(f: &mut Frame, app: &App) {
                 .max(100.0)
         };
 
-        let mut datasets = vec![
+        let datasets = vec![
             Dataset::default()
                 .name("Total Used")
                 .marker(symbols::Marker::Braille)
@@ -708,54 +642,10 @@ fn render_monitoring_screen(f: &mut Frame, app: &App) {
                 .data(&ram_total_data)
         ];
 
-        // Add top 3 users data
-        let colors = [Color::Yellow, Color::Cyan, Color::LightBlue];
-        let mut user_datasets: Vec<(String, Vec<(f64, f64)>, Color)> = Vec::new();
-        
-        // Track top users across all history
-        let mut all_top_users: std::collections::HashSet<String> = std::collections::HashSet::new();
-        for h in &app.history {
-            for (username, _) in &h.top_ram_users {
-                all_top_users.insert(username.clone());
-            }
-        }
-        
-        // Create dataset for each top user
-        for (idx, username) in all_top_users.iter().take(3).enumerate() {
-            let user_data: Vec<(f64, f64)> = app
-                .history
-                .iter()
-                .enumerate()
-                .map(|(i, h)| {
-                    let ram = h.top_ram_users
-                        .iter()
-                        .find(|(u, _)| u == username)
-                        .map(|(_, r)| *r)
-                        .unwrap_or(0.0);
-                    (i as f64, ram)
-                })
-                .collect();
-            
-            if !user_data.is_empty() {
-                user_datasets.push((username.clone(), user_data, colors[idx % colors.len()]));
-            }
-        }
-        
-        for (username, data, color) in &user_datasets {
-            datasets.push(
-                Dataset::default()
-                    .name(username.as_str())
-                    .marker(symbols::Marker::Braille)
-                    .graph_type(GraphType::Line)
-                    .style(Style::default().fg(*color))
-                    .data(data)
-            );
-        }
-
         let ram_title = if app.total_ram_mb > 0.0 {
-            format!("RAM Usage Over Time (Top 3 Users) - Max: {:.0} MB", app.total_ram_mb)
+            format!("RAM Usage Over Time - Max: {:.0} MB", app.total_ram_mb)
         } else {
-            "RAM Usage Over Time (Top 3 Users)".to_string()
+            "RAM Usage Over Time".to_string()
         };
 
         let ram_chart = Chart::new(datasets)

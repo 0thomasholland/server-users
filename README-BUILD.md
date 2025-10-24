@@ -4,23 +4,6 @@ This document describes how to build release binaries for macOS ARM64 and Linux 
 
 ## Quick Start
 
-### Using Nushell Script (Recommended)
-
-```bash
-# Make the script executable
-chmod +x build-release.nu
-
-# Build for all platforms
-./build-release.nu
-
-# Build for specific platform
-./build-release.nu --target macos
-./build-release.nu --target linux
-
-# Specify custom output directory
-./build-release.nu --output-dir dist
-```
-
 ### Using Make
 
 ```bash

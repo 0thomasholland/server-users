@@ -2,6 +2,7 @@ mod ssh;
 mod ui;
 
 use anyhow::Result;
+use clap::Parser;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
     execute,
@@ -18,6 +19,31 @@ use std::{
 };
 
 use ui::{App, AppState};
+
+/// SSH Server User Monitor - Monitor CPU and RAM usage per user on remote servers
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = "SSH Server User Monitor - Monitor CPU and RAM usage per user on remote servers\n\nCan be run without any arguments for interactive configuration mode, or with arguments to connect directly.")]
+struct Args {
+    /// SSH server hostname or IP address
+    #[arg(short = 's', long = "server", alias = "ip")]
+    server: Option<String>,
+
+    /// SSH username
+    #[arg(short = 'u', long = "user", alias = "username")]
+    user: Option<String>,
+
+    /// SSH password (if not using SSH key)
+    #[arg(short = 'p', long = "password", alias = "pass")]
+    password: Option<String>,
+
+    /// Path to SSH private key (default: ~/.ssh/id_rsa)
+    #[arg(short = 'k', long = "key", alias = "ssh-key")]
+    ssh_key: Option<String>,
+
+    /// Use SSH key authentication instead of password
+    #[arg(long = "use-key")]
+    use_ssh_key: bool,
+}
 
 
 
@@ -169,6 +195,8 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: Arc<Mutex
 }
 
 fn main() -> Result<()> {
+    let args = Args::parse();
+
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -176,20 +204,136 @@ fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let app = Arc::new(Mutex::new(App::new()));
-    let res = run_app(&mut terminal, app);
+    let mut app = App::new();
+    
+    // Check if any CLI args were provided
+    let has_cli_args = args.server.is_some() || args.user.is_some() || args.password.is_some() || args.ssh_key.is_some() || args.use_ssh_key;
+    
+    // Pre-populate config from command-line arguments
+    if let Some(server) = args.server {
+        app.config.host = server;
+    }
+    if let Some(user) = args.user {
+        app.config.username = user;
+    }
+    if let Some(password) = args.password {
+        app.config.password = password;
+        app.config.use_ssh_key = false;
+    }
+    if let Some(ssh_key) = args.ssh_key {
+        app.config.ssh_key_path = ssh_key;
+        app.config.use_ssh_key = true;
+    }
+    if args.use_ssh_key {
+        app.config.use_ssh_key = true;
+    }
+    
+    // If all required fields are provided, skip config and connect directly
+    if app.config.is_valid() && has_cli_args {
+        app.state = AppState::Connecting;
+        app.loading = ui::LoadingScreen::new();
+        
+        let host = app.config.host.clone();
+        let user = app.config.username.clone();
+        let password = if app.config.use_ssh_key {
+            None
+        } else {
+            Some(app.config.password.clone())
+        };
+        let ssh_key = if app.config.use_ssh_key {
+            Some(app.config.ssh_key_path.clone())
+        } else {
+            None
+        };
+        
+        let app_arc = Arc::new(Mutex::new(app));
+        let app_clone = app_arc.clone();
+        
+        // Try to connect in a background thread
+        std::thread::spawn(move || {
+            match ssh::get_user_stats(
+                &host,
+                &user,
+                password.as_deref(),
+                ssh_key.as_deref(),
+            ) {
+                Ok((users, total_ram)) => {
+                    let mut app_guard = app_clone.lock().unwrap();
+                    app_guard.total_ram_mb = total_ram;
+                    app_guard.update_data(users);
+                    app_guard.state = AppState::Monitoring;
+                    app_guard.config.error_message = None;
 
-    // Restore terminal
-    disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
-    terminal.show_cursor()?;
+                    // Start data collection thread
+                    let app_clone2 = app_clone.clone();
+                    let host_clone = host.clone();
+                    let user_clone = user.clone();
+                    let password_clone = password.clone();
+                    let ssh_key_clone = ssh_key.clone();
 
-    if let Err(err) = res {
-        println!("Error: {:?}", err);
+                    std::thread::spawn(move || loop {
+                        std::thread::sleep(Duration::from_secs(2));
+                        match ssh::get_user_stats(
+                            &host_clone,
+                            &user_clone,
+                            password_clone.as_deref(),
+                            ssh_key_clone.as_deref(),
+                        ) {
+                            Ok((users, total_ram)) => {
+                                let mut app = app_clone2.lock().unwrap();
+                                if app.state == AppState::Monitoring {
+                                    app.total_ram_mb = total_ram;
+                                    app.update_data(users);
+                                } else {
+                                    break;
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("Error fetching stats: {}", e);
+                            }
+                        }
+                    });
+                }
+                Err(e) => {
+                    let mut app_guard = app_clone.lock().unwrap();
+                    app_guard.state = AppState::Config;
+                    app_guard.config.error_message =
+                        Some(format!("Connection failed: {}", e));
+                }
+            }
+        });
+        
+        let res = run_app(&mut terminal, app_arc);
+        
+        // Restore terminal
+        disable_raw_mode()?;
+        execute!(
+            terminal.backend_mut(),
+            LeaveAlternateScreen,
+            DisableMouseCapture
+        )?;
+        terminal.show_cursor()?;
+
+        if let Err(err) = res {
+            println!("Error: {:?}", err);
+        }
+    } else {
+        // Normal interactive mode
+        let app_arc = Arc::new(Mutex::new(app));
+        let res = run_app(&mut terminal, app_arc);
+
+        // Restore terminal
+        disable_raw_mode()?;
+        execute!(
+            terminal.backend_mut(),
+            LeaveAlternateScreen,
+            DisableMouseCapture
+        )?;
+        terminal.show_cursor()?;
+
+        if let Err(err) = res {
+            println!("Error: {:?}", err);
+        }
     }
 
     Ok(())
