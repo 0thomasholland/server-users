@@ -7,6 +7,8 @@ A terminal-based SSH server monitoring tool built with Rust that displays real-t
 
 Motivation was to have an easy way to see who was using all the resources on a shared server!
 
+![screenshot2](https://github.com/0thomasholland/server-users/blob/main/figs/screenshot.png?raw=true)
+
 ## Installation
 
 ### Prerequisites
