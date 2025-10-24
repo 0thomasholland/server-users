@@ -2,6 +2,8 @@
 
 This document describes how to build release binaries for macOS ARM64 and Linux x86_64.
 
+![](./figs/screenshot.png)
+
 ## Quick Start
 
 ### Using Make
